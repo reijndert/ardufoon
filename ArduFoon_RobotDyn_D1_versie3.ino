@@ -76,6 +76,8 @@ int  dialtonevolume     = 20;
 int  foldertoplay       =  1;           // default play folder
 int  folderselectstatus =  0;           // detect status of pushbutton
 int  foldercounter      =  0;
+int  filecount          =  0;
+int  maxfolder          =  0;           // last folder with 10 songs
 int  buttonpressed      =  0;
 bool showedidle         =  true;
 bool playfinished       =  false;
@@ -83,7 +85,9 @@ bool filenotfound       =  false;
 bool cardonlineagain    =  false;
 int  previouscount      =  0;
 int  mp3currentstate    =  0;
-int  timer              =  0;
+int  timer1             =  0;           // poll timer for mp3 player
+int  timer2             =  0;           // millisecs since last dial
+
 uint addr = 0;
 // fake data to start with
 struct { 
@@ -110,7 +114,7 @@ Serial.println  ("DFPlayer MINI");
 Serial.println  ("WIFI disabled to for less power consumption");
 Serial.println  ("Created by Reijndert de Haas - PD1RH - Assen, The Netherlands");
 Serial.println  ("E-Mail : apm.de.haas@gmail.com");
-Serial.println  ("Compiled on November 30, 2019");
+Serial.println  ("Compiled on December 3rd, 2019");
 
 //control of MP3 Player
 mySoftwareSerial.begin(9600);
@@ -158,9 +162,15 @@ while(foldercounter<11){
     }
     Serial.print  (foldercounter);
     Serial.print  (": ");
-    Serial.println(myDFPlayer.readFileCountsInFolder(foldercounter)); //read fill counts in folder SD:/02
+    filecount = myDFPlayer.readFileCountsInFolder(foldercounter);
+    Serial.println(filecount);
+    if (filecount==10) {
+      maxfolder = foldercounter;
+    }
     foldercounter++;
 }
+Serial.print  ("Highest folder with 10 songs in it: ");
+Serial.println(maxfolder);
 Serial.println("Notice: special sounds like dialtone are in folder 99");
 Serial.println("=====================================================");
 Serial.print  ("Number of files in folder 99 : ");
@@ -175,9 +185,9 @@ showedidle=false;
 void loop() {  //main loop of the program. the state machine is in here
 delay(250);    //poll delay in millisec
 
-if (millis() - timer > 10000) { // printDetail is more responsive this way
+if (millis() - timer1 > 10000) { // printDetail is more responsive this way
                                 // dont ask me why ;-)
-    timer = millis();
+    timer1 = millis();
     mp3currentstate = myDFPlayer.readState();
     //Serial.print  ("MP3 state : ");
     //Serial.println(mp3currentstate);
@@ -310,13 +320,12 @@ switch (state) {
             lastsample = sample;
           }
     }
-    //end of do while loop
     while (digitalRead(DIALERBUSYIN) == DIALERBUSY);
     //rotary disk is in resting position now
 
     if (digitalRead(FOLDERSELECT)==BUTTONPUSHED) {
         Serial.println("\nPushbutton pressed");
-        Serial.print("New folder to play from =" );        
+        Serial.print("Folder changed to " );        
         Serial.println(count);   
         foldertoplay = count;
         if (myDFPlayer.readFileCountsInFolder(foldertoplay)<1) {
@@ -338,10 +347,24 @@ switch (state) {
         }
     else {
         state = S_PLAYMP3;
-                
-        Serial.print  ("\nCurrent count = ");
+        Serial.print  ("\nSong selected = ");
         Serial.println(count);   
     }
+  //quick redial ?
+    Serial.print  ("Time since last dial: ");
+    Serial.println(millis() - timer2);
+    if (millis() - timer2 < 4000 ) { //fast redial
+        foldertoplay = previouscount; 
+        Serial.println("* New folder");  
+        if (foldertoplay>maxfolder) {
+            Serial.println("* folder out of bound, resetting to 1");
+            foldertoplay=1;
+        }
+        savesettings();
+    }
+    timer2 = millis();
+    //Serial.print("Previouscount: "); Serial.println(previouscount);
+    //Serial.print("Currentcount : "); Serial.println(count);
     break; 
 
     case S_FILENOTFOUND:
@@ -367,7 +390,7 @@ switch (state) {
 
     case S_VOLUMESELECT:
     playvolume += volumeincrement;
-    Serial.println    ( playvolume );
+    Serial.print("* v:"); Serial.println    ( playvolume );
     myDFPlayer.volume ( playvolume );
     if(playvolume<=15||playvolume>=30) { 
       volumeincrement = -volumeincrement;
@@ -385,24 +408,22 @@ switch (state) {
       count=1;
     }
         
-    Serial.print   ("Play mp3 sequence nr ");
-    Serial.print   (count);
-    Serial.print   (" in folder ");
-    Serial.print   (foldertoplay);                //choose a play-folder
-    Serial.print   (" at volume ");
-    Serial.println (playvolume);
+    Serial.print   ( "p");  Serial.print  (count);
+    Serial.print   ("-f"); Serial.print  (foldertoplay);
+    Serial.print   ("-v"); Serial.println(playvolume);
     myDFPlayer.playFolder(foldertoplay,count);    //Play the selected mp3 of folder
-    if (previouscount==count){
-      //myDFPlayer.enableLoop();
+/*    
+   if (previouscount==count){
+      myDFPlayer.enableLoop();
       Serial.println("Loop playing enabled");
     }
     else {
-//      myDFPlayer.disableLoop();
+      myDFPlayer.disableLoop();
       Serial.println("Normal play, no loop");
     }
-    
-    Serial.println("Delaying dialer");
-    delay( redialdelay);  // wait before allowing new redial
+*/    
+    //Serial.println("Delaying dialer");
+    //delay( redialdelay);  // wait before allowing new redial
     Serial.println("Ready for input");
     state = S_WAITFORDIALERBUSY;
     break;
@@ -441,6 +462,7 @@ void printDetail(uint8_t type, int value){
       break;
     case WrongStack:
       Serial.println(F("Stack Wrong!"));
+      playfinished = true;
       break;
     case DFPlayerCardInserted:
       Serial.println(F("Card Inserted!"));
@@ -469,9 +491,11 @@ void printDetail(uint8_t type, int value){
           break;
         case SerialWrongStack:
           Serial.println(F("Get Wrong Stack"));
+          playfinished = true;
           break;
         case CheckSumNotMatch:
           Serial.println(F("Check Sum Not Match"));
+          playfinished = true;
           break;
         case FileIndexOut:
           Serial.println(F("File Index Out of Bound"));

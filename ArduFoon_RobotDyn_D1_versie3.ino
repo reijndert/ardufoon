@@ -1,6 +1,7 @@
 /*
  ardufoon
- created by R. de Haas - pd1rh - sept_2019
+ created by R. de Haas - pd1rh -  sept_2019
+                                  dec__2019
   
  hardware: RobotDyn D1-r2 and dfplayer mini
  compiled: set board to NodeMCU 1.0 12E
@@ -114,7 +115,7 @@ Serial.println  ("DFPlayer MINI");
 Serial.println  ("WIFI disabled to for less power consumption");
 Serial.println  ("Created by Reijndert de Haas - PD1RH - Assen, The Netherlands");
 Serial.println  ("E-Mail : apm.de.haas@gmail.com");
-Serial.println  ("Compiled on December 3rd, 2019");
+Serial.println  ("Compiled on December 10th, 2019");
 
 //control of MP3 Player
 mySoftwareSerial.begin(9600);
@@ -164,12 +165,15 @@ while(foldercounter<11){
     Serial.print  (": ");
     filecount = myDFPlayer.readFileCountsInFolder(foldercounter);
     Serial.println(filecount);
-    if (filecount==10) {
+    if (filecount>=10) {
       maxfolder = foldercounter;
+    }
+    else {
+      break; // quit on first folder with filecount < 10
     }
     foldercounter++;
 }
-Serial.print  ("Highest folder with 10 songs in it: ");
+Serial.print  ("Number of subseqeuent folders with 10 songs in it: ");
 Serial.println(maxfolder);
 Serial.println("Notice: special sounds like dialtone are in folder 99");
 Serial.println("=====================================================");
@@ -355,8 +359,10 @@ switch (state) {
     Serial.println(millis() - timer2);
     if (millis() - timer2 < 4000 ) { //fast redial
         foldertoplay = previouscount; 
-        Serial.println("* New folder");  
+        Serial.print  ("* New folder: ");  
+        Serial.println(foldertoplay);
         if (foldertoplay>maxfolder) {
+            Serial.print  ("* max folder is: "); Serial.println(maxfolder);
             Serial.println("* folder out of bound, resetting to 1");
             foldertoplay=1;
         }
@@ -406,6 +412,11 @@ switch (state) {
     if (count<1||count>10) {  // check on irratic values
       Serial.println("Sequence value corrected to 1");
       count=1;
+    }
+    if (foldertoplay>maxfolder) {
+      Serial.println("Folder reset to 1");
+        foldertoplay=1;
+        savesettings();
     }
         
     Serial.print   ( "p");  Serial.print  (count);

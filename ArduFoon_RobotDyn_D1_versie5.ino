@@ -353,7 +353,7 @@ switch (state) {
         state = S_PLAYMP3;        
         dialstring=char(count+48 ) + dialstring;
         Serial.println("");
-        if (millis() - timer3 > 4000) { // dialstring check, add or initialise
+        if (millis() - timer3 > 8000) { // dialstring check, add or initialise
           timer3=millis();
           Serial.println("Slow dial");
           dialstring = char(count+48);
@@ -440,19 +440,19 @@ switch (state) {
     //dialed so far, check special numbers ( reverse ! )
     if (dialstring=="211") {    
       Serial.println("112 message");    
-      myDFPlayer.playFolder(99,1);  //MP3 explaining the wonderfoon
-      dialstring="";                //reset string buffer
+      myDFPlayer.playFolder(99,112);  //MP3 explaining the wonderfoon
+      dialstring="";                  //reset string buffer
     }
     else {
       if (dialstring=="2::") {      
       Serial.println("002 message");
-      myDFPlayer.playFolder(99,2);  //MP3 with fake message
+      myDFPlayer.playFolder(99,2);  //MP3 with fake time message
       dialstring="";                //reset string buffer
       }
       else {      
         if (dialstring=="8::") { 
         Serial.println("008 message");     
-        myDFPlayer.playFolder(99,3);  //MP3 with fake message
+        myDFPlayer.playFolder(99,8);  //MP3 with informational message
         dialstring="";                //reset string buffer
         }
         else {

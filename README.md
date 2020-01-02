@@ -6,6 +6,7 @@ A musicbox for your old Dutch telephone
 * Don't forget the folder '99' !
 * Change volume with pushbutton 
 * Play a song by dialing a number
-* Play a song by dialing folder number first and then songnumber within 4 seconds
+* Play a song by dialing folder number first and then songnumber within a few seconds
+* Find the Easter Eggs ;-)
 
 Have fun !

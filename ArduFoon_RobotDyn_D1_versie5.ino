@@ -1,7 +1,7 @@
 /*
  ardufoon
  created by R. de Haas - pd1rh -  sept_2019
-                                  dec__2019
+                                  jan__2020
   
  hardware: RobotDyn D1-r2 and dfplayer mini
  compiled: set board to NodeMCU 1.0 12E
@@ -31,14 +31,14 @@
 #include "EEPROM.h"
 #include "ESP8266WiFi.h"
 
-#define ARDUFOONVERSION "Ardufoon v1.5 21dec2019 - R. de Haas - pd1rh"
+#define ARDUFOONVERSION "Ardufoon v1.5 02jan2020 - R. de Haas - pd1rh"
 
 #define DIALTONEOUT   13 // D7 425 Hz, not used yet
 #define HOOKIN        12 // D6 detect phone off-hook
 #define DIALERBUSYIN   4 // D2 (yellow) dialer is being used
 #define DIALERPULSESIN 5 // D1 (red)    dialer pulses appear here
                          //    (blue)   dialer, connect to groundpin on NodeMCU
-#define DEBOUNCEDELAY  4 // suggested range : 3 - 9, it depends on the quality of the dialdisk
+#define DEBOUNCEDELAY  5 // suggested range : 3 - 9, it depends on the quality of the dialdisk
 #define MP3RX          0 // D3 softwareserial rx (0)
 #define MP3TX          2 // D4      ''        tx (2)
 #define FOLDERSELECT  14 // D5 pushbutton on phone (combination with dialer to change folder)
@@ -197,7 +197,7 @@ randomSeed(analogRead(0)); // initialise randomizer for future use
 //-----------------------------------------------------------------------
 
 void loop() {  //main loop of the program. the state machine is in here
-delay(250);    //poll delay in millisec
+delay(50);     //poll delay in millisec
 
 if (millis() - timer1 > 10000) { // readstate every 10 secs.
                                  // printDetail is more responsive this way
@@ -416,6 +416,7 @@ switch (state) {
       Serial.println("Changed volume up/down direction ");
     }
     state = S_WAITFORDIALERBUSY;
+    delay(300);
     //savesettings();
     break;
 

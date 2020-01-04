@@ -38,7 +38,7 @@
 #define DIALERBUSYIN   4 // D2 (yellow) dialer is being used
 #define DIALERPULSESIN 5 // D1 (red)    dialer pulses appear here
                          //    (blue)   dialer, connect to groundpin on NodeMCU
-#define DEBOUNCEDELAY  5 // suggested range : 3 - 9, it depends on the quality of the dialdisk
+#define DEBOUNCEDELAY  4 // suggested range : 3 - 9, it depends on the quality of the dialdisk
 #define MP3RX          0 // D3 softwareserial rx (0)
 #define MP3TX          2 // D4      ''        tx (2)
 #define FOLDERSELECT  14 // D5 pushbutton on phone (combination with dialer to change folder)
@@ -75,7 +75,7 @@ int  count              = 0;            // number dialed
 int  redialdelay        = 1000;         // when song starts, wait for mSec for next redial
 int  hookstatus         = HOOKISON;     // default horn is on phone
 int  dialerstatus       = DIALERIDLE;   // start with status IDLE
-int  playvolume         = 25;           // start with 30 = max volume
+int  playvolume         = 20;           // start with 30 = max volume
 int  volumeincrement    = +2;
 int  dialtonevolume     = 20;
 int  foldertoplay       =  1;           // default play folder
@@ -421,7 +421,7 @@ switch (state) {
     break;
 
     case S_PLAYMP3:
-    Serial.print("Dialstring is now: "); Serial.println(dialstring);
+    Serial.print("Dialstring (reversed) is now: "); Serial.println(dialstring);
     readsettings();
     myDFPlayer.volume(playvolume);
     if (count<1||count>10) {  // check on irratic values

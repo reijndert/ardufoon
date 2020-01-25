@@ -1,7 +1,7 @@
-/*
+ /*
   ardufoon
   created by R. de Haas - pd1rh -  sept_2019
-                                  jan__2020
+                                   jan__2020
 
   hardware: RobotDyn D1-r2 and dfplayer mini
   compiled: set board to NodeMCU 1.0 12E
@@ -29,9 +29,9 @@
 #include "DFRobotDFPlayerMini.h"
 #include "SoftwareSerial.h"
 #include "EEPROM.h"
-#include "ESP8266WiFi.h"
+#include "ESP8266WiFi.h"    //not really needed but it includes a reset function :-)
 
-#define ARDUFOONVERSION "Ardufoon v1.6a 22jan2020 - R. de Haas - pd1rh"
+#define ARDUFOONVERSION "Ardufoon v1.6b 25jan2020 - R. de Haas - pd1rh"
 
 #define DIALTONEOUT   13 // D7 425 Hz, not used yet
 #define HOOKIN        12 // D6 detect phone off-hook
@@ -75,7 +75,7 @@ int  count              = 0;            // number dialed
 int  redialdelay        = 1000;         // when song starts, wait for mSec for next redial
 int  hookstatus         = HOOKISON;     // default horn is on phone
 int  dialerstatus       = DIALERIDLE;   // start with status IDLE
-int  playvolume         = 24;           // start with 30 = max volume
+int  playvolume         = 24;
 int  volumeincrement    = +2;
 int  dialtonevolume     = 20;
 int  foldertoplay       =  1;           // default play folder
@@ -101,10 +101,11 @@ int  dialtoneisplaying  =  0;
 uint addr = 0;
 // fake data to start with
 struct {
-  uint value1 = 0; //volume offset
-  uint value2 = 1; //current mp3 folder
-  uint value3 = 1; //lock folder to this one
-  uint value4 = 0; //0=locking disabled  1=locking enabled
+  uint value1 = 24; //volume
+  uint value2 =  1; //current mp3 folder
+  uint value3 =  1; //lock folder to this one
+  uint value4 =  0; //0=locking disabled  1=locking enabled
+  uint value5 =  1; //last song in folder
 } data;
 
 void setup() { //runs once
@@ -151,18 +152,23 @@ void setup() { //runs once
   myDFPlayer.volume    (playvolume);           //Set volume value. From 0 to 30
   myDFPlayer.EQ        (DFPLAYER_EQ_NORMAL);   //Note: equaliser only usefull when using modern speaker
 
-  EEPROM.begin(16);                                     //initialize virtual memory
+  EEPROM.begin(32);                                     //initialize virtual memory
   Serial.print  ("Total mp3 files on disk: ");
   Serial.println(myDFPlayer.readFileCounts());          //read all file counts in SD card
-  Serial.print  ("EEPROM contents: ");
+  Serial.print  ("EEPROM contents 1st read: ");
   EEPROM.get(addr, data);                               //first time use of uC ?
-  Serial.println("(" + String(data.value1) + "," + String(data.value2) + "," + String(data.value3) + "," + String(data.value4) + ")");
-  if (data.value1 > 30 || data.value2 > 10 || data.value3 > 10 || data.value4 > 1) { //failsafe for firsttime use of uC
-    Serial.println("* No valid data found in EEPROM");
-    Serial.println("* overwriting...");
-    savesettings();
-    delay(500); //give it some time
-  }
+  Serial.println("(" + String(data.value1) + "," + String(data.value2) + "," + String(data.value3) + "," + String(data.value4) + "," + String(data.value5) + ")");
+  readsettings();
+  savesettings();
+  Serial.print  ("EEPROM contents 2nd read: ");
+  EEPROM.get(addr, data);                               //first time use of uC ?
+  Serial.println("(" + String(data.value1) + "," + String(data.value2) + "," + String(data.value3) + "," + String(data.value4) + "," + String(data.value5) + ")");
+  //if (data.value1 > 30 || data.value2 > 10 || data.value3 > 10 || data.value4 > 1 || data.value5 > 24) { //failsafe for firsttime use of uC
+  //  Serial.println("* No valid data found in EEPROM");
+  //  Serial.println("* overwriting...");
+  //  savesettings();   //includes autocorrect
+  //  delay(500);       //give it some time
+  //}
 
   readsettings();
   //check first 10 folders
@@ -395,6 +401,7 @@ void loop() {  //main loop of the program. the state machine is in here
           Serial.println("* folder out of bounds, resetting to 1");
           foldertoplay = 1;
         }
+        Serial.println("* settings saved");
         savesettings();
       }
       timer2 = millis();
@@ -429,8 +436,11 @@ void loop() {  //main loop of the program. the state machine is in here
 
     case S_VOLUMESELECT:
       if (dialtoneisplaying == 1) {
-            Serial.println("Cannot use volume now"); 
-            state = S_WAITFORDIALERBUSY;           
+            Serial.println("Cannot use volume now, start last played song"); 
+            dialtoneisplaying = 0;
+            myDFPlayer.stop();
+            readsettings();
+            state = S_PLAYMP3;           
             break;} //dont use volume now
       playvolume += volumeincrement;
       Serial.print("* v:"); Serial.println    ( playvolume );
@@ -446,16 +456,15 @@ void loop() {  //main loop of the program. the state machine is in here
 
     case S_PLAYMP3:
       Serial.print("Dialstring (reversed) is now: "); Serial.println(dialstring);
-      //readsettings();
+//    readsettings();
       myDFPlayer.volume(playvolume);
-      if (count < 1 || count > 10) { // check on irratic values
-        Serial.println("Value corrected to 1");
-        count = 1;
-      }
+//      if (count < 1 || count > 10) { // check on irratic values
+//        Serial.println("Value corrected to 1");
+//        count = 1;
+//      }
       if (foldertoplay > maxfolder) {
         Serial.println("Folder reset to 1");
-        foldertoplay = 1;
-        savesettings();
+        foldertoplay = 1;        
       }
 
       Serial.print   ( "Starting: p");  Serial.print  (count);
@@ -499,6 +508,7 @@ void loop() {  //main loop of the program. the state machine is in here
             else {
               if (lockstatus == 1) {
                 foldertoplay = foldertolock;
+                savesettings();
                 Serial.print("Override to locked folder "); Serial.println(foldertoplay);
               }
               myDFPlayer.playFolder(foldertoplay, count);   //Play the selected mp3 of folder
@@ -508,6 +518,7 @@ void loop() {  //main loop of the program. the state machine is in here
       }
       dialtoneisplaying=0; //reset this flag 
       Serial.println("Ready for user input");
+      savesettings();
       state = S_WAITFORDIALERBUSY;
       break;
 
@@ -520,17 +531,18 @@ void loop() {  //main loop of the program. the state machine is in here
 
 void readsettings() {
   EEPROM.get(addr, data);
-  //playvolume = data.value1;                   //get volumeoffset from EEPROM
+  playvolume   = data.value1;                   //get volumeoffset from EEPROM
   foldertoplay = data.value2;                   //get folder from EEPROM
   foldertolock = data.value3;
   lockstatus   = data.value4;
+  count        = data.value5;                   //get last played song in the folder
   if (foldertoplay < 1 || foldertoplay > 10) {
     Serial.println("Foldertoplay value corrected to 1");
     foldertoplay = 1;
   }
   if (playvolume < 1 || playvolume > 30) {
-    Serial.println("Volumeoffset value corrected to 30");
-    playvolume = 30;
+    Serial.println("Volume value corrected to 24");
+    playvolume = 24;
   }
   if (foldertolock < 1 || foldertolock > 10) {
     Serial.println("Foldertolock set to 1");
@@ -539,6 +551,10 @@ void readsettings() {
   if (lockstatus < 0 || lockstatus > 1) {
     Serial.println("Lockstatus set to 0");
     lockstatus = 0;
+  }
+  if (count < 0 || count > 10) {
+    Serial.println("Song to play set to 1");
+    count = 1;
   }
 
   Serial.println("* settings read");
@@ -549,6 +565,7 @@ void savesettings() {
   data.value2 = foldertoplay;                 //save playfolder
   data.value3 = foldertolock;                 //save locked folder
   data.value4 = lockstatus;                   //save lockstatus
+  data.value5 = count;                        //save last song in folder
   EEPROM.put(addr, data);
   EEPROM.commit();
   Serial.println("* settings saved");

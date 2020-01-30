@@ -31,7 +31,7 @@
 #include "EEPROM.h"
 #include "ESP8266WiFi.h"
 
-#define ARDUFOONVERSION "Ardufoon v1.7 26jan2020 - R. de Haas - pd1rh"
+#define ARDUFOONVERSION "Ardufoon v1.7 27jan2020 - R. de Haas - pd1rh"
 
 #define DIALTONEOUT   13 // D7 425 Hz, not used yet
 #define HOOKIN        12 // D6 detect phone off-hook
@@ -318,9 +318,10 @@ switch (state) {
         dialstring="";
         Serial.print("Folder changed to " ); Serial.println(count);   
         Serial.print("Pushbutton pressed, locking this folder "); Serial.println(count);
-        if (myDFPlayer.readFileCountsInFolder(foldertoplay)<1) {
+        if (myDFPlayer.readFileCountsInFolder(count)<1) { //@@
           Serial.println("No files in folder, defaulting to folder 1");
           foldertoplay = 1;
+          folderislocked = 0;  // cancel the option
           myDFPlayer.playFolder(99,97);
           delay(3000);
           myDFPlayer.stop();
@@ -429,6 +430,10 @@ switch (state) {
       folderislocked = 0;
       dialstring="";                  //reset string buffer
       savesettings();
+      myDFPlayer.volume(dialtonevolume);
+      myDFPlayer.playFolder(99,98); //beep beep confirm tone
+      delay(3000);
+      myDFPlayer.pause();
       state = S_IDLE;
       break;
     }
@@ -471,8 +476,8 @@ void readsettings() {
       foldertoplay=1;
     }
     if (playvolume<1||playvolume>30) {
-      Serial.println("Volumeoffset value corrected to 30");
-      playvolume=30;
+      Serial.println("Volumeoffset value corrected to 24");
+      playvolume=24;
     }    
     Serial.println("* settings read");
 }

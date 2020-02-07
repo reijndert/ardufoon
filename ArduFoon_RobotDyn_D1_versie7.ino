@@ -1,14 +1,15 @@
 /*
- ardufoon
+ ardufoon, source available on Github
+ 
  created by R. de Haas - pd1rh -  sept_2019
-                                  jan__2020
+                                  feb__2020
   
  hardware: RobotDyn D1-r2 and dfplayer mini
  compiled: set board to NodeMCU 1.0 12E
- pinout of RobotDyn D1-r2 WIFI: https://robotdyn.com/pub/media/0G-00005444==WIFI-D1R2-ESP8266/DOCS/PINOUT==0G-00005444==WIFI-D1R2-ESP8266.jpg
- pinout of DFPlayer: https://wiki.dfrobot.com/DFPlayer_Mini_SKU_DFR0299
- based on an idea found on https://apinventions.wordpress.com/wonderfoon/
- MP3 code : https://wiki.dfrobot.com/DFPlayer_Mini_SKU_DFR0299
+ pinout of RobotDyn D1-r2 WIFI:  https://robotdyn.com/pub/media/0G-00005444==WIFI-D1R2-ESP8266/DOCS/PINOUT==0G-00005444==WIFI-D1R2-ESP8266.jpg
+ pinout of DFPlayer:             https://wiki.dfrobot.com/DFPlayer_Mini_SKU_DFR0299
+ based on an idea found on       https://apinventions.wordpress.com/wonderfoon/
+ MP3 code :                      https://wiki.dfrobot.com/DFPlayer_Mini_SKU_DFR0299
  
  hardware:
  RobotDyn d1 r2 wifi and DFplayer MINI (mp3). --> install library DFRobotDFPlayermini first before compiling
@@ -31,13 +32,13 @@
 #include "EEPROM.h"
 #include "ESP8266WiFi.h"
 
-#define ARDUFOONVERSION "Ardufoon v1.7 27jan2020 - R. de Haas - pd1rh"
+#define ARDUFOONVERSION "Ardufoon v1.7 2feb2020 - R. de Haas - pd1rh"
 
-#define DIALTONEOUT   13 // D7 425 Hz, not used yet
+#define ROTARYLED     13 // D7 statusled , flashes rotary disk diagnostics
 #define HOOKIN        12 // D6 detect phone off-hook
 #define DIALERBUSYIN   4 // D2 (yellow) dialer is being used
 #define DIALERPULSESIN 5 // D1 (red)    dialer pulses appear here
-                         //    (blue)   dialer, connect to groundpin on NodeMCU
+                         //    (blue)   dialer, connect to command ground
 #define DEBOUNCEDELAY  4 // suggested range : 3 - 9, it depends on the quality of the dialdisk. 4 is safe choice i think.
 #define MP3RX          0 // D3 softwareserial rx (0)
 #define MP3TX          2 // D4      ''        tx (2)
@@ -72,7 +73,6 @@ int  sample1            = 0;            // debounce temp variable
 int  sample2            = 0;            // debounce temp variable
 int  lastsample         = 0;            // to detect alternating sample values
 int  count              = 0;            // number dialed
-int  redialdelay        = 1000;         // when song starts, wait for mSec for next redial
 int  hookstatus         = HOOKISON;     // default horn is on phone
 int  dialerstatus       = DIALERIDLE;   // start with status IDLE
 int  playvolume         = 20;           
@@ -99,24 +99,26 @@ int  folderislocked     =  0;           // status lock to a playfolder
 int  lockedfolder       =  1;           // which folder is the locked folder
 
 uint addr = 0;
-struct {           //defaults
+struct {            //defaults
   uint value1 = 24; //volume 
   uint value2 =  1; //current mp3 folder
   uint value3 =  0; //folder is locked ( status flag )
   uint value4 =  1; //locked folder ( always play this folder )
 } data;
 
-void setup() { //runs once
 
-//hardware setup
-pinMode(DIALTONEOUT   , OUTPUT);        //not used yet
+
+
+
+void setup() { //runs once at startup
+pinMode(ROTARYLED     , OUTPUT);
 pinMode(HOOKIN        , INPUT_PULLUP);
 pinMode(DIALERBUSYIN  , INPUT_PULLUP);
 pinMode(DIALERPULSESIN, INPUT_PULLUP);
 pinMode(FOLDERSELECT  , INPUT_PULLUP);
 
-//disable WIFI module of RobotDyn board, we dont need it and it saves power
-WiFi.forceSleepBegin();
+fastblink(1,1000);        //show robotdyn is alive !
+WiFi.forceSleepBegin();   //disable WIFI module of RobotDyn board, we dont need it and it saves some milli-amps
 
 Serial.begin    (9600);             //for serial debugging
 Serial.println  ("");
@@ -135,12 +137,12 @@ if (!myDFPlayer.begin(mySoftwareSerial)) {  //Use softwareSerial to communicate 
     Serial.println(F("2.Please insert the SD card!")); 
     //hardware troubles
     Serial.println("\nFailed to init MP3 player, trying to restart");
-    delay(5000);
+    sos();
     ESP.restart();           //reboot this thing. hope the mp3 connects now!
     while (true) {
       Serial.println("reboot failed");
-      Serial.println("disconnect power and try again");
-      delay(5000);
+      Serial.println("disconnect power and try again");      
+      sos();
     }
   }
   else {
@@ -158,19 +160,9 @@ Serial.print  ("Last Folder: "); Serial.println(foldertoplay);
 Serial.print  ("Use locking: "); Serial.println(folderislocked);
 Serial.print  ("Lock to    : "); Serial.println(lockedfolder);
 
-//EEPROM.get(addr,data);                                //first time use of uC ?
-//Serial.println("("+String(data.value1)+","+String(data.value2)+String(data.value3)+String(data.value4)+")");
-//if (data.value1>24||data.value2>10||data.value3>1||data.value4>10) { //failsave for firsttime use of uC
-//    Serial.println("* No valid data found in EEPROM");
-//    Serial.println("* correcting...");
-//    savesettings();
-//    delay(500); //give it some time
-//}
-
 readsettings();
-//check first 10 folders
 foldercounter=1;
-while(foldercounter<11){
+while(foldercounter<11){                              //check first 10 folders
     Serial.print  ("Files in folder ");
     if (foldercounter<10) {
         Serial.print("0");                            //for pretty debugging :)
@@ -188,13 +180,15 @@ while(foldercounter<11){
       break; // quit on first folder with filecount < 10
     }
     foldercounter++;
+    fastblink(1,50);
 }
 Serial.print  ("Maxfolder now: ");
 Serial.println(maxfolder);
 
-//if ( !myDFPlayer.readFileCountsInFolder(99) == 4) {
-//  state=S_PANIC;
-//}
+
+if ( !myDFPlayer.readFileCountsInFolder(99) == 4) {
+  state=S_PANIC;
+}
 
 readsettings();            // no need for i think :) , since...
 foldertoplay      = 1;     // choose folder 1 after reboot
@@ -202,6 +196,7 @@ showedidle        = false;
 dialstring        = "";
 timer3            = millis();
 randomSeed(analogRead(0)); // initialise randomizer for future use
+
 }
 
 
@@ -259,11 +254,13 @@ switch (state) {
       Serial.println("Phone idle");
       showedidle    = true;
       playfinished  = false;
+//      fastblink(1,50);
     }
 
     if (hookstatus == HOOKISOFF) {
         Serial.println("Handset detected");        
         showedidle = false;
+        fastblink(1,50);
         state = S_DIALTONE;
     }
     else { myDFPlayer.stop();   //mp3 silent
@@ -283,6 +280,7 @@ switch (state) {
     if ( dialerstatus == DIALERBUSY){
       Serial.println("Rotary disk is busy now");      
       myDFPlayer.pause();  //mp3 silent; pause
+      fastblink(1,50);
       state = S_WAITFORPULSES;
     }
     
@@ -314,16 +312,19 @@ switch (state) {
 
     if (digitalRead(FOLDERSELECT)==BUTTONPUSHED) {  //lock to this folder
         folderislocked = 1;
-        Serial.print("\n"); Serial.println(ARDUFOONVERSION);
+        Serial.println();
+        Serial.println(ARDUFOONVERSION);
         dialstring="";
         Serial.print("Folder changed to " ); Serial.println(count);   
         Serial.print("Pushbutton pressed, locking this folder "); Serial.println(count);
+        fastblink(1,500);
         if (myDFPlayer.readFileCountsInFolder(count)<1) { //@@
           Serial.println("No files in folder, defaulting to folder 1");
           foldertoplay = 1;
           folderislocked = 0;  // cancel the option
           myDFPlayer.playFolder(99,97);
-          delay(3000);
+          fastblink(4,300);
+          //delay(1000);         // give time to play disconnect sound
           myDFPlayer.stop();
         }
         foldertoplay = count;
@@ -365,28 +366,27 @@ switch (state) {
     break; 
 
     case S_FILENOTFOUND:
-    Serial.println("Play three tone sound");
+    Serial.println("Play sound *unknown*");
     myDFPlayer.playFolder(99,97); //three tones
-    delay(3000);
+    sos();
+    //delay(1800);
     myDFPlayer.pause();
     filenotfound=false;
     state = S_DIALTONE;
     break;
 
-    //should be nice if it worked. need this use of the busy pin of mp3
     case S_PLAYFINISHED:
     Serial.println("Play finished");
     myDFPlayer.volume(dialtonevolume);
     myDFPlayer.playFolder(99,98); //beep beep 'no connection'
     state = S_WAITFORDIALERBUSY;
-    delay(500);
     playfinished=false;
     break;
 
     case S_VOLUMESELECT:
     if (dialtoneplaying == 1) {        
         Serial.println("Not possible when dialtone is playing");
-        delay(300);
+        fastblink(1,200);
         state = S_WAITFORDIALERBUSY;
         break;
     }
@@ -419,6 +419,7 @@ switch (state) {
     if (folderislocked == 1) {
         Serial.print("Folder "); Serial.print(lockedfolder); Serial.println(" locking detected");    
         foldertoplay = lockedfolder;
+        fastblink(2,100);
     }
     Serial.print   ( "Starting: p");  Serial.print  (count);
     Serial.print   ("-f"); Serial.print  (foldertoplay);
@@ -439,12 +440,14 @@ switch (state) {
     }
     else {
       if (dialstring=="2::") {      
+      fastblink(1,200);
       Serial.println("002 message");
       myDFPlayer.playFolder(99,2);  //MP3 with fake time message
       dialstring="";                //reset string buffer
       }
       else {      
-        if (dialstring=="8::") { 
+        if (dialstring=="8::") {
+        fastblink(1,200); 
         Serial.println("008 message");     
         myDFPlayer.playFolder(99,8);  //MP3 with informational message
         dialstring="";                //reset string buffer
@@ -460,8 +463,44 @@ switch (state) {
 
     case S_PANIC:
     Serial.println  ("P A N I C");
+    sos();
     break;
   }
+}
+
+void fastblink(int blinkcount, int blinkdelay) {
+for (int i = 0; i<blinkcount; i++ ) {
+  digitalWrite(ROTARYLED,HIGH);
+  delay(blinkdelay / 2);
+  digitalWrite(ROTARYLED,LOW);
+  delay(blinkdelay);
+  }
+}
+
+void sos() {                       //used for indicating a panic situation
+    for (int i=0; i<3; i++) {
+        digitalWrite(ROTARYLED,HIGH);
+        delay(100);
+        digitalWrite(ROTARYLED,LOW);
+        delay(50);
+        }
+    
+    delay(200);
+    for (int i=0; i<3; i++) {
+        digitalWrite(ROTARYLED,HIGH);
+        delay(300);
+        digitalWrite(ROTARYLED,LOW);
+        delay(100);
+        }
+    
+    delay(200);
+    for (int i=0; i<3; i++) {
+        digitalWrite(ROTARYLED,HIGH);
+        delay(100);
+        digitalWrite(ROTARYLED,LOW);
+        delay(50);
+        }
+    delay(200);
 }
 
 
@@ -515,7 +554,7 @@ void printDetail(uint8_t type, int value){
     case DFPlayerPlayFinished:
       Serial.print(F("Number:"));
       Serial.print(value);
-      Serial.println(F(" Play Finished!"));  // unreliable readings...
+      Serial.println(F(" Play Finished!"));
       playfinished = true;
       delay(500);
       break;

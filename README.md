@@ -9,7 +9,8 @@ A musicbox for your old Dutch telephone
 * Change volume with pushbutton 
 * Play a song by dialing a number
 * Play a song by dialing folder number first and then songnumber within a few seconds
-* From serial 0009 and up: diagnostic LED implemented
-* Find the Easter Eggs ;-)
+* Diagnostic LED when available
+* Random and autoplay possible
+* Some old dutch service numbers are working :-)
 
 Have fun !

@@ -10,7 +10,7 @@ A musicbox for your old Dutch telephone
 * Play a song by dialing a number
 * Play a song by dialing folder number first and then songnumber within a few seconds
 * Diagnostic LED when available
-* Random and autoplay possible
+* Random and autoplay possible, even in locked mode
 * Some old dutch service numbers are working :-)
 
 Have fun !

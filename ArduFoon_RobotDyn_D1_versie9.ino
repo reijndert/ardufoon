@@ -2,7 +2,7 @@
  ardufoon, source available on Github
  
  created by R. de Haas - pd1rh -  sept_2019
-                                  mrt__2020
+                                  jun__2020
   
  hardware: RobotDyn D1-r2 , dfplayer mini and H-Bridge for ringer control
  compiled: set board to NodeMCU 1.0 12E
@@ -12,7 +12,8 @@
  MP3 code :                      https://wiki.dfrobot.com/DFPlayer_Mini_SKU_DFR0299
  
  hardware:
- RobotDyn d1 r2 wifi and DFplayer MINI (mp3). --> install library DFRobotDFPlayermini first before compiling
+ RobotDyn d1 r2 wifi and DFplayer MINI (mp3),
+ install library DFRobotDFPlayermini first before compiling
  
  MP3 Player view from above:
  ----------+  +------------+
@@ -31,7 +32,7 @@
 #include "SoftwareSerial.h"
 #include "EEPROM.h"
 #include "ESP8266WiFi.h"
-#define   ARDUFOONVERSION "Ardufoon v1.9 10MEI2020 with LED/RINGER/RANDOM support - R. de Haas - pd1rh"
+#define   ARDUFOONVERSION "Ardufoon v1.9 9JUN2020 R. de Haas - pd1rh"
 
 
 // port definitions
@@ -65,7 +66,7 @@
 #define S_PLAYFINISHED      8
 #define S_PANIC             9
 #define S_PLAYRINGTONE     10
-#define S_PLAYRANDOMLY     11   //not implemented completely
+#define S_PLAYRANDOMLY     11
 
 //status flags
 #define HOOKISON       0
@@ -109,7 +110,7 @@ int  mp3currentstate    =  0;
 int  timer1             =  0;           // poll timer for mp3 player
 int  timer2             =  0;           // millisecs since last dial
 int  timer3             =  0;           // for use with dialstring evaluation
-String dialstring       = "";
+String dialstring       = "";           // reversed dialstring
 int  dialtoneplaying    =  0;           // used by volume button
 int  folderislocked     =  0;           // status lock to a playfolder
 int  lockedfolder       =  1;           // which folder is the locked folder
@@ -120,12 +121,14 @@ int  randomsong         =  0;
 bool randomenabled      =  false;
 int  lastrandomplayed   =  0;
 
+// non volatile memory structure
 uint addr = 0;
-struct {            //defaults
-  uint value1 = 24; //volume 
-  uint value2 =  1; //current mp3 folder
-  uint value3 =  0; //folder is locked ( status flag )
-  uint value4 =  1; //locked folder ( always play this folder )
+struct {                //defaults
+  uint value1 = 24;     //volume 
+  uint value2 =  1;     //current mp3 folder
+  uint value3 =  0;     //folder is locked ( status flag )
+  uint value4 =  1;     //locked folder ( always play this folder )
+  uint value5 =  false; //random enabled status
 } data;
 
 
@@ -212,11 +215,12 @@ myDFPlayer.EQ        (DFPLAYER_EQ_NORMAL);   //Note: equaliser only usefull when
 
 EEPROM.begin(64);                                     //initialize virtual memory
 readsettings();
-Serial.println("EEPROM contents: ");
+Serial.println("EEPROM contents");
 Serial.print  ("Last Volume: "); Serial.println(playvolume);
 Serial.print  ("Last Folder: "); Serial.println(foldertoplay);
 Serial.print  ("Use locking: "); Serial.println(folderislocked);
 Serial.print  ("Lock to    : "); Serial.println(lockedfolder);
+Serial.print  ("Random     : "); Serial.println(randomenabled);
 
 readsettings();
 foldercounter=1;
@@ -243,6 +247,9 @@ while(foldercounter<11){                              //check first 10 folders
 Serial.print  ("Maxfolder now: ");
 Serial.println(maxfolder);
 
+timer3            = millis();
+randomSeed( timer3 ); // initialise randomizer seed
+Serial.print( "Random seed: "); Serial.println(timer3);
 
 if ( !myDFPlayer.readFileCountsInFolder(99) == 4) {
   state=S_PANIC;
@@ -252,9 +259,6 @@ readsettings();
 foldertoplay      = 1;          // choose folder 1 after a reboot
 showedidle        = false;
 dialstring        = "";
-timer3            = millis();
-
-randomSeed( millis() ); // initialise randomizer seed
 }
 
 
@@ -263,10 +267,10 @@ randomSeed( millis() ); // initialise randomizer seed
 void loop() {  //main loop of the program. the state machine is in here
 delay(50);     //poll delay in millisec
 
-if (millis() - timer1 > 10000) { // readstate every 10 secs.
-                                 // printDetail is more responsive this way
+if (millis() - timer1 > 5000) { // readstate every 10 secs.
+                                // printDetail is more responsive this way
     timer1 = millis();
-    mp3currentstate = myDFPlayer.readState();
+    mp3currentstate = myDFPlayer.readState();  //also checks "song ended"
    }
    
 //should not be sending this under normal condition since it was available already...
@@ -333,7 +337,7 @@ switch (state) {
     dialstring="";                 // clear dialstring
     dialtoneplaying = 1;
     state = S_WAITFORDIALERBUSY;
-    if (randomenabled) {           // previous song ended in random-mode, continue randomly
+    if (randomenabled) {           // previous song ended in random-mode, continue playing randomly
       state = S_PLAYRANDOMLY;
       Serial.println("Continue randomplay unattended");   
     } 
@@ -347,6 +351,7 @@ switch (state) {
         Serial.println("Random play disabled");
       }
       randomenabled = false;    //disable random functions      
+      savesettings();
       fastblink(1,50);
       state = S_WAITFORPULSES;
     }    
@@ -435,6 +440,8 @@ switch (state) {
         savesettings();
     }
     timer2 = millis();
+    randomSeed( timer2 ); // (re-)initialise randomizer seed
+    Serial.println("New random seed");
     break; 
 
     case S_FILENOTFOUND:
@@ -464,7 +471,8 @@ switch (state) {
         Serial.print("Random mode, ");
         fastblink(1,200);
         randomenabled = true;
-        state = S_PLAYRANDOMLY;
+        savesettings();
+        state = S_PLAYRANDOMLY;        
         break;
     }
     playvolume += volumeincrement;
@@ -480,8 +488,9 @@ switch (state) {
     break;
 
     case S_PLAYMP3:
+    randomSeed( millis() ); // (re-)initialise randomizer seed
     Serial.print("Dialstring (reversed) is now: "); Serial.println(dialstring);
-    readsettings();
+    //readsettings();
     dialtoneplaying = 0;
     myDFPlayer.volume(playvolume);
     if (count<1||count>10) {  // check on irratic values
@@ -503,7 +512,8 @@ switch (state) {
     Serial.print   ("-v"); Serial.println(playvolume);
 
     //dialed so far, check special numbers ( reverse ! )
-    if (dialstring=="111") {    
+    if (dialstring=="111") { 
+      Serial.println(ARDUFOONVERSION);   
       Serial.print("Unlocking folder "); Serial.println(lockedfolder);    
       folderislocked = 0;
       dialstring="";                  //reset string buffer
@@ -554,9 +564,8 @@ switch (state) {
         if (randomsong>10) {
           randomsong = 1;
         }
-        Serial.print("Folder "); Serial.print(lockedfolder); Serial.println(" locking detected");    
+        Serial.print("Folder lock, ");// Serial.print(lockedfolder); Serial.println(" locking detected");    
         randomfolder = lockedfolder;
-        Serial.println("Songs increment now, so not random anymore");
     }
     else {
         randomsong   = random(10)+1 ;  
@@ -632,6 +641,7 @@ void readsettings() {
     foldertoplay   = data.value2; //get folder from EEPROM
     folderislocked = data.value3; //get status locked
     lockedfolder   = data.value4; //get locked folder
+    randomenabled  = data.value5; //get status random-play
     if (foldertoplay<1||foldertoplay>10) {
       Serial.println("Foldertoplay value corrected to 1");
       foldertoplay=1;
@@ -640,7 +650,8 @@ void readsettings() {
       Serial.println("Volumeoffset value corrected to 24");
       playvolume=24;
     }    
-    Serial.println("* settings read");
+    //Serial.println("* settings read");
+    //Serial.print  ("Random: "); Serial.println(randomenabled);
 }
 
 void savesettings() {
@@ -648,9 +659,10 @@ void savesettings() {
     data.value2 = foldertoplay;                 //save playfolder
     data.value3 = folderislocked;
     data.value4 = lockedfolder;
+    data.value5 = randomenabled;
     EEPROM.put(addr,data);
     EEPROM.commit();
-    Serial.println("* settings saved");
+    //Serial.println("* settings saved");
 }
 
 //mp3 error handling

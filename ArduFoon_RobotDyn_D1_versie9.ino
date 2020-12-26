@@ -2,11 +2,13 @@
  ardufoon, source available on Github
  
  created by R. de Haas - pd1rh -  sept_2019
-                                  jun__2020
+                                  dec _2020
   
  hardware: RobotDyn D1-r2 , dfplayer mini and H-Bridge for ringer control
+           Wemos d1 mini werkt ook goed, net als mini versie van de RobotDyn d1-2 (NodeM met cp2102)
  compiled: set board to NodeMCU 1.0 12E
  pinout of RobotDyn D1-r2 WIFI:  https://robotdyn.com/pub/media/0G-00005444==WIFI-D1R2-ESP8266/DOCS/PINOUT==0G-00005444==WIFI-D1R2-ESP8266.jpg
+ pinout of Wemos d1 mini      :  https://i2.wp.com/www.teachmemicro.com/wp-content/uploads/2019/07/wemos-d1-mini-pinout.jpg?ssl=1
  pinout of DFPlayer:             https://wiki.dfrobot.com/DFPlayer_Mini_SKU_DFR0299
  based on an idea found on       https://apinventions.wordpress.com/wonderfoon/
  MP3 code :                      https://wiki.dfrobot.com/DFPlayer_Mini_SKU_DFR0299
@@ -32,7 +34,7 @@
 #include "SoftwareSerial.h"
 #include "EEPROM.h"
 #include "ESP8266WiFi.h"
-#define   ARDUFOONVERSION "Ardufoon v1.9 9JUN2020 R. de Haas - pd1rh"
+#define   ARDUFOONVERSION "Ardufoon v1.91 26-DEC-2020"
 
 
 // port definitions
@@ -48,12 +50,10 @@
 #define MP3TX           2 // D4      ''        tx (2)
 #define FOLDERSELECT   14 // D5 pushbutton on phone (combination with dialer to change folder)
 #define HOOKIN         12 // D6 detect phone off-hook
-#define ROTARYLED      16 // D0 or D7 statusled , flashes rotary disk diagnostics
-                          // D0 is blue onboard LED of NodeMCU
-                          //    Use *only* when NO bell attached
+#define ROTARYLED      15 // D8 statusled, diagnostics
 
 //#define in1 55           // d?  t.b.d. hammer control for ringer
-//#define in2 44           // d?  t.b.d. "  ( please use inverter to save i/o port
+//#define in2 44           // d?  t.b.d. "  ( please use inverter to protect i/o port
                          
 //states of FSM ( finite state machine )
 #define S_IDLE              1
@@ -79,7 +79,7 @@
 
 //constant
 #define DEBOUNCEDELAY  4         // suggested range : 3 - 9, it depends on the quality of the dialdisk. 4 is safe choice i think.
-#define TESTMODE       false
+#define TESTMODE       false 
 
 SoftwareSerial mySoftwareSerial( MP3RX , MP3TX );  //rx, tx
 DFRobotDFPlayerMini myDFPlayer;
@@ -128,7 +128,7 @@ struct {                //defaults
   uint value2 =  1;     //current mp3 folder
   uint value3 =  0;     //folder is locked ( status flag )
   uint value4 =  1;     //locked folder ( always play this folder )
-  uint value5 =  false; //random enabled status
+  uint value5 =  true;  //random enabled status
 } data;
 
 
@@ -152,7 +152,7 @@ Serial.begin    (9600);             //for serial debugging
 Serial.println  ("");
 Serial.print    ("\n\nArdufoon Wonderfoon ");
 Serial.print    (ARDUFOONVERSION);
-Serial.println  ("using RobotDyn D1-r2 WIFI and DFPlayer MINI");
+Serial.println  ("using RobotDyn D1-r2 WIFI / WEMOS LILO and DFPlayer MINI");
 Serial.println  ("Created by Reijndert de Haas - PD1RH - Assen, The Netherlands");
 Serial.println  ("E-Mail : apm.de.haas@gmail.com");
 
@@ -165,7 +165,8 @@ else {
   Serial.println("Nope");
 }
 
-//testroutine
+/*
+//testroutine 1
 while (TESTMODE) {
       hookstatus          = digitalRead(HOOKIN);
       dialerstatus        = digitalRead(DIALERBUSYIN);
@@ -181,7 +182,38 @@ while (TESTMODE) {
       Serial.println("");
       delay(2000);    
 }
-//end of testroutine
+//end of testroutine 1
+*/
+//testroutine 2
+while (TESTMODE) {                      //CHECKED ON WEMOS D1 MINI
+      pinMode(HOOKIN        , OUTPUT);  //GPIO.12 D6
+      pinMode(DIALERBUSYIN  , OUTPUT);  //GPIO.4  D2
+      pinMode(DIALERPULSESIN, OUTPUT);  //GPIO.5  D1
+      pinMode(FOLDERSELECT  , OUTPUT);  //GPIO.14 D5
+      pinMode(RINGERBELL1   , OUTPUT);  //GPIO.16 D0
+      pinMode(RINGERBELL2   , OUTPUT);  //GPIO.13 D7
+      pinMode(ROTARYLED     , OUTPUT);  //GPIO.15 D8
+
+      delay(50);
+      digitalWrite(HOOKIN, HIGH);
+      digitalWrite(DIALERBUSYIN, HIGH);
+      digitalWrite(DIALERPULSESIN, HIGH);
+      digitalWrite(FOLDERSELECT, HIGH);
+      digitalWrite(RINGERBELL1, HIGH);
+      digitalWrite(RINGERBELL2, HIGH);
+      digitalWrite(ROTARYLED,   HIGH);
+      delay(20);
+      digitalWrite(HOOKIN, LOW);
+      digitalWrite(DIALERBUSYIN, LOW);
+      digitalWrite(DIALERPULSESIN, LOW);
+      digitalWrite(FOLDERSELECT, LOW);
+      digitalWrite(RINGERBELL1, LOW);
+      digitalWrite(RINGERBELL2, LOW);
+      digitalWrite(ROTARYLED,   LOW);
+      delay(280);
+}
+//end of testroutine 2
+
 
 Serial.println("Not in testmode, continuing.");
 
@@ -213,8 +245,10 @@ myDFPlayer.setTimeOut(800);                  //Set serial communictaion time out
 myDFPlayer.volume    (playvolume);           //Set volume value. From 0 to 30
 myDFPlayer.EQ        (DFPLAYER_EQ_NORMAL);   //Note: equaliser only usefull when using modern speaker
 
-EEPROM.begin(64);                                     //initialize virtual memory
+EEPROM.begin(128);                                     //initialize virtual memory
 readsettings();
+
+folderislocked=false;
 Serial.println("EEPROM contents");
 Serial.print  ("Last Volume: "); Serial.println(playvolume);
 Serial.print  ("Last Folder: "); Serial.println(foldertoplay);
@@ -222,7 +256,8 @@ Serial.print  ("Use locking: "); Serial.println(folderislocked);
 Serial.print  ("Lock to    : "); Serial.println(lockedfolder);
 Serial.print  ("Random     : "); Serial.println(randomenabled);
 
-readsettings();
+savesettings(); // initialises new memory layout when needed
+
 foldercounter=1;
 while(foldercounter<11){                              //check first 10 folders
     Serial.print  ("Files in folder ");
@@ -609,7 +644,7 @@ void fastblink(int blinkcount, int blinkdelay) {
 }
 
 void sos() {                       //used for indicating a panic situation
-    Serial.println("Sending an SOS");
+    Serial.println("SOS");
     if ( soscount > 0 ) {               // use LED only when sos occurs more than once
       fastblink(3,200);    delay(800);  // 3 times dash
       fastblink(3,600);    delay(800);  // 3 times dot
@@ -643,13 +678,24 @@ void readsettings() {
     lockedfolder   = data.value4; //get locked folder
     randomenabled  = data.value5; //get status random-play
     if (foldertoplay<1||foldertoplay>10) {
-      Serial.println("Foldertoplay value corrected to 1");
+      Serial.print("> Settings, foldertoplay value corrected from ");
+      Serial.print(foldertoplay);
+      Serial.println(" to 1");
       foldertoplay=1;
     }
     if (playvolume<1||playvolume>30) {
-      Serial.println("Volumeoffset value corrected to 24");
+      Serial.print("> Settings, volumeoffset value corrected from ");
+      Serial.print(playvolume);
+      Serial.println(" to 24");
       playvolume=24;
     }    
+      if (lockedfolder<0||lockedfolder>1) {
+      Serial.print("> Settings, lockedfolder value corrected from ");
+      Serial.print(lockedfolder);
+      Serial.println(" to 1");
+      lockedfolder=1;
+    }    
+
     //Serial.println("* settings read");
     //Serial.print  ("Random: "); Serial.println(randomenabled);
 }
